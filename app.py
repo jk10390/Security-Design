@@ -1,51 +1,46 @@
 from flask import Flask, request, redirect, url_for, flash, get_flashed_messages
-
-import csv
+import sqlite3
 import os
-from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'your_flask_secret_key'  # Used for session management and flash messages
 
-# Hardcoded valid credentials for demonstration purposes.
-VALID_USERNAME = 'admin'
-VALID_PASSWORD = 'password123'
+DB_FILE = "users.db"
 
-# Log file to store login attempts.
-LOG_FILE = 'login_attempts.csv'
+# Create an insecure database with a plaintext password field
+def setup_database():
+    if not os.path.exists(DB_FILE):
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE,
+                password TEXT
+            )
+        ''')
+        # Insert an example user (admin, password123)
+        cursor.execute("INSERT INTO users (username, password) VALUES ('admin', 'password123')")
+        conn.commit()
+        conn.close()
 
-def log_attempt(username, password, accepted):
-    """
-    Append a login attempt to the CSV log file.
-    The CSV contains a header with:
-      timestamp, username, password, accepted
-    """
-    file_exists = os.path.isfile(LOG_FILE)
-    with open(LOG_FILE, 'a', newline='') as csvfile:
-        fieldnames = ['timestamp', 'username', 'password', 'accepted']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow({
-            'timestamp': datetime.now().isoformat(),
-            'username': username,
-            'password': password,
-            'accepted': accepted
-        })
+setup_database()  # Ensure database exists
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        
-        # Determine if the login is accepted.
-        accepted = (username == VALID_USERNAME and password == VALID_PASSWORD)
-        
-        # Log the attempt.
-        log_attempt(username, password, accepted)
-        
-        if accepted:
+
+        # ❌ Insecure SQL Query (Vulnerable to SQL Injection)
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
+        cursor.execute(query)
+        user = cursor.fetchone()
+        conn.close()
+
+        if user:
             return f"""
             <html>
                 <head>
@@ -64,8 +59,8 @@ def login():
         else:
             flash("Invalid username or password. Please try again.")
             return redirect(url_for('login'))
-    
-    # Build the login page HTML.
+
+    # Build the login page HTML
     messages = get_flashed_messages()
     message_html = ""
     if messages:
@@ -74,7 +69,7 @@ def login():
             {" ".join(messages)}
         </div>
         """
-    
+
     return f"""
     <html>
         <head>
@@ -116,5 +111,4 @@ def login():
     """
 
 if __name__ == '__main__':
-    # Run the Flask app on localhost, port 5000 by default.
     app.run(debug=True)
