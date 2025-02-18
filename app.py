@@ -51,7 +51,9 @@ def login():
         # Check credentials in database
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, password))
+        query = f"SELECT * FROM users WHERE username = '{username}' AND password = '{password}'"
+        cursor.execute(query)  # ❌ Vulnerable to SQL Injection!
+
         user = cursor.fetchone()
         conn.close()
 
